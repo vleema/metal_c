@@ -1,4 +1,7 @@
 #include <stdint.h>
+#include <stddef.h>
+
+#include "helper.h"
 
 __attribute__((section (".multiboot_header"))) struct {
 	uint32_t magic;
@@ -32,6 +35,13 @@ uint32_t get_cr3(void)
 {
 	uint32_t value;
 	asm volatile("movl %%cr3, %0" : "=r"(value));
+	return value;
+}
+
+uint32_t get_cr2(void)
+{
+	uint32_t value;
+	asm volatile("movl %%cr2, %0" : "=r"(value));
 	return value;
 }
 
@@ -93,4 +103,37 @@ void put_hex(uint32_t v)
 	} else {
 		puts("0");
 	}
+}
+
+ __attribute__((weak))
+void page_fault_handler(struct state *s)
+{
+	puts("\nPage fault\n");
+	for(;;);
+}
+
+struct idt_entry {
+	uint16_t offset_lo;
+	uint16_t segment;
+	uint16_t attrs;
+	uint16_t offset_hi;
+} __attribute__ ((__packed__));
+
+struct idt_desc {
+	uint16_t limit;
+	uint32_t addr;
+} __attribute__ ((__packed__));
+
+void init_idt(void)
+{
+	static struct idt_entry idt[15];
+	static struct idt_desc desc = { sizeof(idt) - 1, (size_t)&idt[0] };
+	void page_fault_entry(void);
+
+	idt[14].offset_lo = (size_t)&page_fault_entry;
+	idt[14].offset_hi = (size_t)&page_fault_entry >> 16;
+	idt[14].segment = 8;
+	idt[14].attrs = 0x8f00;
+
+	asm volatile("lidtl %0" :: "m"(desc));
 }
